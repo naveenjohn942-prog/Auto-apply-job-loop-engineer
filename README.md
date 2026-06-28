@@ -46,14 +46,44 @@ docker compose up
 ## Run
 
 ```bash
-curl -X POST http://localhost:8000/start -F "resume=@Your\ Resume.pdf"
+# Minimal — defaults to Bangalore, India
+curl -X POST http://localhost:8000/start -F "resume=@Resume.pdf"
+
+# Multiple cities
+curl -X POST http://localhost:8000/start \
+  -F "resume=@Resume.pdf" \
+  -F "locations=Bangalore,Mumbai" \
+  -F "country_code=in"
+
+# Remote jobs (UK)
+curl -X POST http://localhost:8000/start \
+  -F "resume=@Resume.pdf" \
+  -F "country_code=gb" \
+  -F "remote=true"
 ```
+
+| Field | Default | Description |
+|---|---|---|
+| `resume` | required | PDF file |
+| `locations` | `Bangalore` | Comma-separated cities |
+| `country_code` | `in` | Adzuna country code (`in`, `gb`, `us`, …) |
+| `remote` | `false` | Omits location filter, searches for remote roles |
+| `years_of_experience` | parsed from PDF | Override the resume-parsed value |
 
 Watch progress:
 
 ```bash
 docker compose logs worker -f
 ```
+
+## Tests
+
+```bash
+source venv/bin/activate
+python -m pytest tests/ -v
+```
+
+No live API calls — all external services are mocked.
 
 ## Environment variables
 
@@ -67,7 +97,8 @@ docker compose logs worker -f
 | `DATABASE_URL` | Postgres connection string (`postgresql+asyncpg://...`) |
 | `REDIS_URL` | Redis connection string |
 | `USER_EMAIL` | Verified SendGrid sender email (your email) |
-| `REPORT_EMAIL` | Where the XLSX report is sent (can differ from `USER_EMAIL`) |
+| `REPORT_EMAIL` | Where the XLSX report is sent (defaults to `USER_EMAIL`) |
+| `OUTREACH_COOLING_DAYS` | Days before re-emailing the same job (default: `30`) |
 
 ## Project structure
 
