@@ -38,21 +38,37 @@ _SCORE_TOOL = {
 
 async def evaluate_job(job: dict, profile: dict) -> dict:
     """Score a single job against the candidate profile. Starts from skepticism."""
+    yoe = profile.get("years_of_experience") or 0
+    locations = profile.get("locations", [])
+    location_str = ", ".join(locations) if locations else "unknown location"
+    remote = profile.get("remote", False)
+    location_context = "remote" if remote else location_str
+
+    if yoe < 3:
+        seniority_rule = (
+            "HARD RULE — overrides everything else:\n"
+            "- If the title contains Senior, Staff, Principal, Lead, SDE-2, SDE-3, SDE II, SDE III, "
+            "Engineer II, Engineer III, or any equivalent seniority marker, score ≤ 3.\n"
+        )
+    elif yoe >= 6:
+        seniority_rule = (
+            "HARD RULE — overrides everything else:\n"
+            "- If the title contains Junior, Entry, Intern, Trainee, or any equivalent junior marker, score ≤ 3.\n"
+        )
+    else:
+        seniority_rule = ""
+
     prompt = (
         f"You are a skeptical recruiter reviewing a job match. "
         f"Default to a LOW score unless there is strong evidence of fit. "
         f"A score of 7+ means you would recommend this application.\n\n"
-        f"CONTEXT: This candidate is based in Bangalore, India. "
-        f"In the Indian startup market, 1-2 years of production backend experience "
-        f"is competitive for SDE-1 and junior SDE-2 roles. Do not penalise "
-        f"for lacking 4-6 years unless the JD explicitly requires it.\n\n"
-        f"HARD RULE — overrides everything else:\n"
-        f"- If the title contains Senior, Staff, Principal, Lead, SDE-2, SDE-3, SDE II, SDE III, "
-        f"Engineer II, Engineer III, or any equivalent seniority marker, score ≤ 3.\n\n"
+        f"CONTEXT: This candidate is based in {location_context} with {yoe} years of experience. "
+        f"Do not penalise for lacking more years than the candidate has unless the JD explicitly requires it.\n\n"
+        f"{seniority_rule}\n"
         f"Candidate: {profile['name']}\n"
         f"Target role: {profile['target_role']}\n"
         f"Skills: {', '.join(profile['skills']) if isinstance(profile['skills'], list) else profile['skills']}\n"
-        f"Years of experience: {profile.get('years_of_experience', 'unknown')}\n\n"
+        f"Years of experience: {yoe}\n\n"
         f"Job Title: {job['title']}\n"
         f"Company: {job['company']}\n"
         f"Location: {job['location']}\n"

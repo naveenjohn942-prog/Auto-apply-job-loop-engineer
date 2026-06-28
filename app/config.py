@@ -14,6 +14,7 @@ class _Settings:
     redis_url: str = os.environ["REDIS_URL"]
     user_email: str = os.environ["USER_EMAIL"]
     report_email: str = os.environ.get("REPORT_EMAIL") or os.environ["USER_EMAIL"]
+    outreach_cooling_days: int = int(os.environ.get("OUTREACH_COOLING_DAYS", "30"))
 
 
 settings = _Settings()

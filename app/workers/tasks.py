@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import tempfile
+from datetime import datetime, timedelta
 
 from app.config import settings
 from app.db import ApplicationRecord, Base, CandidateProfile, SessionLocal, engine
@@ -31,7 +32,14 @@ async def _enrich_match(match: dict, profile: dict) -> dict:
     return match
 
 
-async def run_pipeline(ctx: dict, pdf_bytes: bytes) -> dict:
+async def run_pipeline(
+    ctx: dict,
+    pdf_bytes: bytes,
+    locations: list[str] | None = None,
+    country_code: str = "in",
+    remote: bool = False,
+    years_of_experience_override: float | None = None,
+) -> dict:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
@@ -43,6 +51,12 @@ async def run_pipeline(ctx: dict, pdf_bytes: bytes) -> dict:
         raw_text, profile_data = await parse_resume(pdf_path)
     finally:
         os.unlink(pdf_path)
+
+    profile_data["locations"] = locations or ["Bangalore"]
+    profile_data["country_code"] = country_code
+    profile_data["remote"] = remote
+    if years_of_experience_override is not None:
+        profile_data["years_of_experience"] = years_of_experience_override
 
     async with SessionLocal() as session:
         profile = CandidateProfile(
@@ -85,21 +99,27 @@ async def run_pipeline(ctx: dict, pdf_bytes: bytes) -> dict:
         )
         adzuna_to_db_id = {r.adzuna_id: r.id for r in rows}
 
-        # Find adzuna_ids already emailed for any profile — never re-send
+        # Skip jobs emailed within the cooling window — allow re-send after it expires
         already_emailed = set()
         if adzuna_to_db_id:
+            from sqlalchemy import func
+            cooling_cutoff = datetime.utcnow() - timedelta(days=settings.outreach_cooling_days)
             sent_rows = await session.execute(
-                select(JobPosting.adzuna_id)
+                select(JobPosting.adzuna_id, func.max(AR.created_at).label("last_sent"))
                 .join(AR, AR.job_posting_id == JobPosting.id)
                 .where(
                     JobPosting.adzuna_id.in_(adzuna_ids),
                     AR.status == "emailed",
                 )
+                .group_by(JobPosting.adzuna_id)
             )
-            already_emailed = {r.adzuna_id for r in sent_rows}
+            already_emailed = {r.adzuna_id for r in sent_rows if r.last_sent > cooling_cutoff}
 
     if already_emailed:
-        log.info("Skipping outreach for already-emailed jobs: %s", already_emailed)
+        log.info(
+            "Skipping %d jobs emailed within the last %d days: %s",
+            len(already_emailed), settings.outreach_cooling_days, already_emailed,
+        )
 
     # Persist ApplicationRecords and send outreach emails
     async with SessionLocal() as session:
