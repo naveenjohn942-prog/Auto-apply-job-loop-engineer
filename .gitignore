@@ -1,0 +1,26 @@
+# Environment
+.env
+
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# Resume (personal data)
+*.pdf
+
+# Test scripts
+test_*.py
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
