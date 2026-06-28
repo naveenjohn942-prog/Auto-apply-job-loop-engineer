@@ -1,15 +1,15 @@
-# AutoApply — Project Guide for Claude
+# LoopHire — Project Guide for Claude
 
 ## What this project does
 
-AutoApply automates job hunting. A user uploads a resume PDF via a single API call. The system parses the resume, discovers matching jobs, scores and filters them through a three-stage AI loop, finds recruiter emails, sends personalized outreach, and emails an XLSX report — all without manual intervention.
+LoopHire automates job hunting. A user uploads a resume PDF via a single API call or the web UI. The system parses the resume, discovers matching jobs, scores and filters them through a three-stage AI loop, finds recruiter emails, sends personalized outreach, and emails an XLSX report — all without manual intervention.
 
 ---
 
 ## Architecture overview
 
 ```
-HTTP POST /start
+HTTP POST /start  (or web UI at GET /)
     │
     ▼
 FastAPI (app/main.py)
@@ -42,24 +42,43 @@ ARQ Worker (app/workers/tasks.py)  ← run_pipeline()
 
 ### `POST /start`
 
-Accepts `multipart/form-data`. All fields except `resume` have defaults.
+Accepts `multipart/form-data`. At least one of `country_code` or `remote=true` is required.
 
-| Field | Type | Default | Description |
+| Field | Required | Default | Description |
 |---|---|---|---|
-| `resume` | file | required | PDF resume |
-| `locations` | string | `"Bangalore"` | Comma-separated city names e.g. `"Bangalore,Mumbai"` |
-| `country_code` | string | `"in"` | Adzuna country code (`in`, `gb`, `us`, etc.) |
-| `remote` | bool | `false` | If true, searches without a location filter and appends "remote" to query |
-| `years_of_experience` | float | null | Overrides the value parsed from the PDF |
+| `resume` | yes | — | PDF resume |
+| `country_code` | no* | — | Adzuna country code (`in`, `gb`, `us`, etc.) |
+| `locations` | no | — | Comma-separated city names e.g. `"Bangalore,Mumbai"` |
+| `remote` | no | `false` | If true, also searches remote roles globally via `gb` endpoint |
+| `years_of_experience` | no | parsed from PDF | Overrides the resume-parsed value |
+
+*Returns 400 if neither `country_code` nor `remote=true` is provided.
 
 **Response:**
 ```json
 {"job_id": "abc123", "status": "queued"}
 ```
 
-### `GET /health`
+### `GET /`
+Serves the web UI (`app/static/index.html`).
 
+### `GET /health`
 Returns `{"status": "ok"}`.
+
+---
+
+## Search logic
+
+| Country | Cities | Remote | Adzuna calls made |
+|---|---|---|---|
+| `in` | Bangalore | off | `in` + `where=Bangalore` |
+| `in` | Bangalore, Mumbai | off | `in/Bangalore` + `in/Mumbai` (parallel) |
+| `in` | Bangalore | on | `in/Bangalore` + `gb/remote` (parallel) |
+| `in` | *(none)* | off | `in` country-wide |
+| `in` | *(none)* | on | `in` + `gb/remote` (parallel) |
+| *(none)* | *(none)* | on | `gb/remote` only |
+
+Remote global always uses `gb` (largest Adzuna remote dataset). Results from all calls are deduplicated by `adzuna_id`. Adzuna returns 429 on rate limit — handled gracefully (returns empty list, loop continues). 1-second sleep between pages prevents hitting rate limits.
 
 ---
 
@@ -68,7 +87,7 @@ Returns `{"status": "ok"}`.
 The core pipeline is a generator → evaluator → adversarial verifier chain. Each stage is an independent Claude call — no stage evaluates its own output.
 
 ```
-Adzuna page → evaluate all 20 jobs concurrently → score ≥ 7 → verify (adversarial) → quality match
+Adzuna page → evaluate all jobs concurrently → score ≥ 7 → verify (adversarial) → quality match
 ```
 
 **Exit conditions** (whichever comes first):
@@ -82,7 +101,7 @@ Adzuna page → evaluate all 20 jobs concurrently → score ≥ 7 → verify (ad
   - `yoe < 3` → Senior/Staff/Principal/Lead titles score ≤ 3
   - `yoe >= 6` → Junior/Intern/Trainee titles score ≤ 3
   - `3 ≤ yoe < 6` → no hard rule
-- Prompt includes location and remote context from the profile
+- Location context built dynamically from `profile["locations"]`, `profile["country_code"]`, and `profile["remote"]`
 
 **Verifier** (`app/agents/verifier.py`):
 - Tries to **refute** every evaluator score ≥ 7
@@ -109,10 +128,10 @@ profile = {
 }
 
 # Injected in tasks.py from request body:
-profile["locations"] = ["Bangalore", "Mumbai"]  # parsed from comma-sep form field
-profile["country_code"] = "in"
+profile["locations"] = ["Bangalore", "Mumbai"]  # empty list = no city filter
+profile["country_code"] = "in"                  # None = no country (remote-only)
 profile["remote"] = False
-# years_of_experience overridden here if request body provided it
+# years_of_experience overridden here if provided in request
 ```
 
 ---
@@ -143,7 +162,7 @@ Tracks outreach status per job match. Statuses: `pending → emailed / failed / 
 
 **Hunter.io**: uses domain search (not email finder). Prefers contacts with HR/recruiter/talent in department or position. Falls back to first available email.
 
-**Adzuna**: country code goes in the URL path (`/v1/api/jobs/{country_code}/search/{page}`). `where` is a city name. For multiple locations, generator makes parallel calls and deduplicates by `adzuna_id`. For remote, `where` is omitted and "remote" is appended to the `what` query.
+**Adzuna**: country code goes in the URL path (`/v1/api/jobs/{country_code}/search/{page}`). Free tier rate-limits at ~3 pages of parallel calls — handled with 429 fallback + 1s inter-page sleep.
 
 ---
 
@@ -178,13 +197,15 @@ docker compose restart worker   # reload Python code changes (not just `up -d`)
 
 **Important**: `docker compose up -d` does not reload Python modules if the container is already running. Always use `docker compose restart worker` after code changes.
 
-Trigger a pipeline run:
+Web UI: `http://localhost:8000`
+
+Trigger via API:
 ```bash
 curl -X POST http://localhost:8000/start \
   -F "resume=@Resume.pdf" \
-  -F "locations=Bangalore,Mumbai" \
   -F "country_code=in" \
-  -F "remote=false"
+  -F "locations=Bangalore,Mumbai" \
+  -F "remote=true"
 ```
 
 Watch worker logs:
@@ -205,7 +226,7 @@ Tests are in `tests/` and use mocks — no live API calls, no DB, no Redis requi
 
 | File | What it covers |
 |---|---|
-| `tests/test_api.py` | `/start` form field parsing, defaults, non-PDF rejection |
+| `tests/test_api.py` | `/start` form field parsing, defaults, non-PDF rejection, missing country+remote validation |
 | `tests/test_generator.py` | Single/multiple locations, remote flag, country code, deduplication |
 | `tests/test_evaluator.py` | Seniority rules by yoe, location/remote in prompt |
 | `tests/test_cooling.py` | Cooling window boundary conditions, custom days |
@@ -216,11 +237,11 @@ Tests are in `tests/` and use mocks — no live API calls, no DB, no Redis requi
 
 ```
 app/
-  main.py                 FastAPI app — /start and /health endpoints
+  main.py                 FastAPI app — /start, /health, serves frontend
   config.py               Env var loading, fails fast on missing keys
   db.py                   SQLAlchemy models: CandidateProfile, JobPosting, ApplicationRecord
   agents/
-    generator.py          Adzuna job discovery — handles multiple locations + remote
+    generator.py          Adzuna discovery — multi-location, remote, 429-safe
     evaluator.py          Claude Haiku scorer — dynamic seniority rules
     verifier.py           Adversarial Claude agent — tries to refute positive matches
     loop.py               Orchestrates generator → evaluator → verifier loop
@@ -234,6 +255,8 @@ app/
     tasks.py              ARQ task: full pipeline, cooling period check, report email
     arq_settings.py       ARQ WorkerSettings — registers run_pipeline function
   report.py               Builds styled XLSX from quality matches list
+  static/
+    index.html            Web UI — multi-city tag input, country/remote selector
 tests/
   test_api.py
   test_generator.py
