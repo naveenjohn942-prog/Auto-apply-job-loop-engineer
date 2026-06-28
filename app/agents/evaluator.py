@@ -39,10 +39,18 @@ _SCORE_TOOL = {
 async def evaluate_job(job: dict, profile: dict) -> dict:
     """Score a single job against the candidate profile. Starts from skepticism."""
     yoe = profile.get("years_of_experience") or 0
-    locations = profile.get("locations", [])
-    location_str = ", ".join(locations) if locations else "unknown location"
+    locations = profile.get("locations") or []
+    country_code = profile.get("country_code")
     remote = profile.get("remote", False)
-    location_context = "remote" if remote else location_str
+
+    if locations:
+        location_context = ", ".join(locations)
+    elif country_code:
+        location_context = country_code.upper()
+    else:
+        location_context = "unspecified"
+    if remote:
+        location_context += " (open to remote)"
 
     if yoe < 3:
         seniority_rule = (

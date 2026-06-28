@@ -167,7 +167,7 @@ async def run_pipeline(
             xlsx_bytes=xlsx,
             xlsx_filename=f"autoapply_{profile_data['name'].replace(' ', '_')}.xlsx",
         )
-        log.info("Report emailed to %s", settings.user_email)
+        log.info("Report emailed to %s", settings.report_email)
     except Exception as e:
         log.error("Failed to send report email: %s", e)
 

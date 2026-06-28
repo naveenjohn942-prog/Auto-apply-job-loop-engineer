@@ -1,8 +1,13 @@
 import asyncio
+import logging
 
 import httpx
 
+log = logging.getLogger(__name__)
+
 from app.config import settings
+
+_REMOTE_COUNTRY = "gb"  # largest Adzuna dataset for remote roles
 
 
 async def _fetch_page(query: str, location: str | None, country_code: str, page: int) -> list[dict]:
@@ -19,7 +24,12 @@ async def _fetch_page(query: str, location: str | None, country_code: str, page:
     base = f"https://api.adzuna.com/v1/api/jobs/{country_code}/search"
     async with httpx.AsyncClient() as client:
         resp = await client.get(f"{base}/{page}", params=params, timeout=30.0)
-        resp.raise_for_status()
+
+    if resp.status_code == 429:
+        log.warning("Adzuna rate limit hit for %s page %d — skipping", country_code, page)
+        return []
+
+    resp.raise_for_status()
 
     return [
         {
@@ -38,24 +48,31 @@ async def _fetch_page(query: str, location: str | None, country_code: str, page:
 
 
 async def generate_candidates(profile: dict, page: int = 1) -> list[dict]:
-    locations: list[str] = profile.get("locations", ["Bangalore"])
-    country_code: str = profile.get("country_code", "in")
+    locations: list[str] = profile.get("locations") or []
+    country_code: str | None = profile.get("country_code")
     remote: bool = profile.get("remote", False)
     query = profile["target_role"]
 
+    calls = []
+
+    # Onsite calls
+    if locations and country_code:
+        calls.extend(_fetch_page(query, loc, country_code, page) for loc in locations)
+    elif country_code:
+        calls.append(_fetch_page(query, None, country_code, page))
+
+    # Global remote call
     if remote:
-        return await _fetch_page(query + " remote", None, country_code, page)
+        calls.append(_fetch_page(query + " remote", None, _REMOTE_COUNTRY, page))
 
-    if len(locations) == 1:
-        return await _fetch_page(query, locations[0], country_code, page)
+    if not calls:
+        return []
 
-    # Multiple locations: parallel calls, deduplicate by adzuna_id
-    pages = await asyncio.gather(*[
-        _fetch_page(query, loc, country_code, page) for loc in locations
-    ])
+    results = await asyncio.gather(*calls)
+
     seen: set[str] = set()
     deduped: list[dict] = []
-    for jobs in pages:
+    for jobs in results:
         for job in jobs:
             if job["adzuna_id"] not in seen:
                 seen.add(job["adzuna_id"])

@@ -85,5 +85,6 @@ async def run_loop(profile: dict, profile_id: int, session: AsyncSession) -> lis
         # Persist progress after each page — crash-safe
         await session.commit()
         page += 1
+        await asyncio.sleep(1)  # avoid Adzuna rate limit across parallel country calls
 
     return quality_matches

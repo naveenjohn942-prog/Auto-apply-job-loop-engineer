@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LoopHire</title>
+  <style>
+    :root {
+      --bg:         #07090F;
+      --surface:    #0D1219;
+      --surface-hi: #121B26;
+      --border:     #1C2B3A;
+      --border-hi:  #263D52;
+      --text:       #B8C5D6;
+      --text-bright:#E2ECF4;
+      --text-muted: #4D6070;
+      --accent:     #38BDF8;
+      --accent-dim: rgba(56,189,248,0.08);
+      --success:    #34D399;
+      --error:      #F87171;
+      --font:       system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --mono:       ui-monospace, 'Cascadia Mono', 'SF Mono', 'Fira Code', monospace;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem 1rem;
+      line-height: 1.5;
+    }
+
+    .wrap { width: 100%; max-width: 480px; }
+
+    .header { margin-bottom: 2rem; }
+    .logo { font-size: 1.4rem; font-weight: 700; letter-spacing: -0.03em; color: var(--text-bright); }
+    .logo span { color: var(--accent); }
+    .tagline { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem; letter-spacing: 0.06em; text-transform: uppercase; }
+
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1.75rem; }
+
+    /* Upload */
+    .upload-zone {
+      border: 1.5px dashed var(--border-hi);
+      border-radius: 6px;
+      padding: 1.75rem 1.5rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+      position: relative;
+      margin-bottom: 1.5rem;
+    }
+    .upload-zone:hover, .upload-zone.drag-over { border-color: var(--accent); background: var(--accent-dim); }
+    .upload-zone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+    .upload-icon { width: 28px; height: 28px; margin: 0 auto 0.6rem; color: var(--text-muted); display: block; }
+    .upload-zone.has-file .upload-icon { color: var(--success); }
+    .upload-primary { font-size: 0.875rem; color: var(--text); }
+    .upload-primary strong { color: var(--accent); font-weight: 500; }
+    .upload-zone.has-file .upload-primary { color: var(--success); }
+    .upload-hint { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem; }
+
+    /* Fields */
+    .field { margin-bottom: 1.1rem; }
+    .field-label {
+      display: block;
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      margin-bottom: 0.35rem;
+    }
+    .field-label .optional { font-weight: 400; text-transform: none; letter-spacing: 0; opacity: 0.6; }
+
+    input[type="text"],
+    input[type="number"],
+    select {
+      width: 100%;
+      background: var(--surface-hi);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 0.5rem 0.7rem;
+      font-family: var(--font);
+      font-size: 0.875rem;
+      color: var(--text-bright);
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    input[type="text"]:focus,
+    input[type="number"]:focus,
+    select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(56,189,248,0.1); }
+    input::placeholder { color: var(--text-muted); }
+    select option[value=""] { color: var(--text-muted); }
+
+    /* Tag input */
+    .tag-field {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.35rem;
+      background: var(--surface-hi);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 0.35rem 0.5rem;
+      cursor: text;
+      transition: border-color 0.15s, box-shadow 0.15s;
+      min-height: 36px;
+    }
+    .tag-field.focused { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(56,189,248,0.1); }
+    .tag-field input {
+      flex: 1;
+      min-width: 80px;
+      background: none;
+      border: none;
+      padding: 0.15rem 0.2rem;
+      font-size: 0.875rem;
+      color: var(--text-bright);
+      outline: none;
+      box-shadow: none;
+    }
+    .tag-field input:focus { border: none; box-shadow: none; }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      background: rgba(56,189,248,0.12);
+      border: 1px solid rgba(56,189,248,0.25);
+      border-radius: 4px;
+      padding: 0.15rem 0.4rem 0.15rem 0.5rem;
+      font-size: 0.78rem;
+      color: var(--accent);
+      white-space: nowrap;
+    }
+    .chip-remove {
+      background: none;
+      border: none;
+      color: var(--accent);
+      cursor: pointer;
+      padding: 0;
+      font-size: 0.9rem;
+      line-height: 1;
+      opacity: 0.6;
+    }
+    .chip-remove:hover { opacity: 1; }
+
+    .row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem; }
+
+    /* Toggle */
+    .toggle-wrap {
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      background: var(--surface-hi);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 0.5rem 0.7rem;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+      user-select: none;
+      min-height: 36px;
+    }
+    .toggle-wrap.on { border-color: var(--accent); background: var(--accent-dim); }
+    .toggle-wrap input { display: none; }
+    .toggle-track {
+      width: 26px; height: 14px;
+      background: var(--border-hi);
+      border-radius: 7px;
+      position: relative;
+      transition: background 0.15s;
+      flex-shrink: 0;
+    }
+    .toggle-track::after {
+      content: '';
+      position: absolute;
+      width: 9px; height: 9px;
+      background: var(--text-muted);
+      border-radius: 50%;
+      top: 2.5px; left: 2.5px;
+      transition: transform 0.15s, background 0.15s;
+    }
+    .toggle-wrap.on .toggle-track { background: rgba(56,189,248,0.25); }
+    .toggle-wrap.on .toggle-track::after { transform: translateX(12px); background: var(--accent); }
+    .toggle-text { font-size: 0.8rem; color: var(--text); }
+
+    /* Error hint */
+    .field-error { font-size: 0.72rem; color: var(--error); margin-top: 0.35rem; display: none; }
+    .field-error.visible { display: block; }
+
+    /* Submit */
+    .submit-btn {
+      width: 100%;
+      margin-top: 1.5rem;
+      padding: 0.65rem 1rem;
+      background: var(--accent);
+      color: #07090F;
+      border: none;
+      border-radius: 5px;
+      font-family: var(--font);
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+    .submit-btn:hover:not(:disabled) { opacity: 0.88; }
+    .submit-btn:active:not(:disabled) { transform: scale(0.99); }
+    .submit-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    /* Result */
+    .result { display: none; margin-top: 1.25rem; padding: 1.1rem 1.25rem; background: var(--surface-hi); border: 1px solid var(--border); border-radius: 6px; }
+    .result.visible { display: block; }
+    .result.error { border-color: rgba(248,113,113,0.4); }
+    .result.success { border-color: rgba(52,211,153,0.25); }
+    .result-label { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 0.4rem; }
+    .result.success .result-label { color: var(--success); }
+    .result.error .result-label { color: var(--error); }
+    .job-id { font-family: var(--mono); font-size: 0.75rem; color: var(--text-muted); margin-bottom: 1.1rem; word-break: break-all; }
+    .job-id span { color: var(--text); }
+
+    /* Pipeline stages */
+    .stages { display: flex; align-items: flex-start; }
+    .stage { display: flex; flex-direction: column; align-items: center; gap: 0.35rem; flex: 0 0 auto; }
+    .stage-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--border-hi); transition: background 0.3s; }
+    .stage.active .stage-dot { background: var(--accent); animation: glow 1.4s ease-in-out infinite; }
+    .stage.done .stage-dot { background: var(--success); box-shadow: none; animation: none; }
+    .stage-lbl { font-size: 0.6rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-muted); white-space: nowrap; }
+    .stage.active .stage-lbl { color: var(--accent); }
+    .stage.done .stage-lbl { color: var(--success); }
+    .seg { flex: 1; height: 1px; background: var(--border); margin-top: 3px; transition: background 0.4s; }
+    .seg.done { background: var(--success); }
+    .seg.active { background: linear-gradient(90deg, var(--success), var(--accent)); }
+
+    @keyframes glow {
+      0%, 100% { box-shadow: 0 0 0 3px rgba(56,189,248,0.15); }
+      50%       { box-shadow: 0 0 0 5px rgba(56,189,248,0.35); }
+    }
+
+    .result-note { font-size: 0.72rem; color: var(--text-muted); margin-top: 0.9rem; }
+
+    @media (max-width: 400px) {
+      .row { grid-template-columns: 1fr 1fr; }
+      .row .field:last-child { grid-column: span 2; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; transition: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="header">
+      <div class="logo">Loop<span>Hire</span></div>
+      <div class="tagline">Automated job application pipeline</div>
+    </div>
+
+    <div class="card">
+      <form id="form" novalidate>
+
+        <!-- Resume upload -->
+        <div class="upload-zone" id="zone">
+          <input type="file" id="resume" accept=".pdf" required>
+          <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+          </svg>
+          <div class="upload-primary"><strong>Click to upload</strong> or drag and drop</div>
+          <div class="upload-hint" id="hint">PDF resume only</div>
+        </div>
+
+        <!-- Country -->
+        <div class="field">
+          <label class="field-label" for="country">Country <span class="optional">(optional if remote)</span></label>
+          <select id="country">
+            <option value="">— Select country —</option>
+            <option value="in">🇮🇳 India</option>
+            <option value="gb">🇬🇧 United Kingdom</option>
+            <option value="us">🇺🇸 United States</option>
+            <option value="au">🇦🇺 Australia</option>
+            <option value="ca">🇨🇦 Canada</option>
+            <option value="de">🇩🇪 Germany</option>
+            <option value="sg">🇸🇬 Singapore</option>
+            <option value="ae">🇦🇪 UAE</option>
+            <option value="nz">🇳🇿 New Zealand</option>
+          </select>
+        </div>
+
+        <!-- Cities tag input -->
+        <div class="field">
+          <label class="field-label">Cities <span class="optional">(optional — press Enter to add)</span></label>
+          <div class="tag-field" id="tagField">
+            <input type="text" id="cityInput" placeholder="e.g. Bangalore">
+          </div>
+        </div>
+
+        <!-- Row: remote + yoe -->
+        <div class="row">
+          <div class="field" style="grid-column: span 2;">
+            <label class="field-label">Remote</label>
+            <label class="toggle-wrap" id="toggleWrap">
+              <input type="checkbox" id="remote">
+              <div class="toggle-track"></div>
+              <span class="toggle-text">Accept remote roles globally</span>
+            </label>
+          </div>
+          <div class="field">
+            <label class="field-label" for="yoe">Yrs Exp <span class="optional">(auto)</span></label>
+            <input type="number" id="yoe" placeholder="auto" min="0" max="40" step="0.5">
+          </div>
+        </div>
+
+        <div class="field-error" id="searchError">Select a country or enable remote search.</div>
+
+        <button type="submit" class="submit-btn" id="btn">Run Pipeline</button>
+      </form>
+
+      <div class="result" id="result">
+        <div class="result-label" id="rlabel"></div>
+        <div class="job-id" id="jobid"></div>
+        <div class="stages">
+          <div class="stage" id="s0"><div class="stage-dot"></div><div class="stage-lbl">Parse</div></div>
+          <div class="seg" id="seg0"></div>
+          <div class="stage" id="s1"><div class="stage-dot"></div><div class="stage-lbl">Loop</div></div>
+          <div class="seg" id="seg1"></div>
+          <div class="stage" id="s2"><div class="stage-dot"></div><div class="stage-lbl">Enrich</div></div>
+          <div class="seg" id="seg2"></div>
+          <div class="stage" id="s3"><div class="stage-dot"></div><div class="stage-lbl">Outreach</div></div>
+          <div class="seg" id="seg3"></div>
+          <div class="stage" id="s4"><div class="stage-dot"></div><div class="stage-lbl">Report</div></div>
+        </div>
+        <div class="result-note" id="rnote"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --- Upload zone ---
+    const zone = document.getElementById('zone');
+    const fileInput = document.getElementById('resume');
+    const hint = document.getElementById('hint');
+
+    fileInput.addEventListener('change', () => {
+      const f = fileInput.files[0];
+      if (f) { zone.classList.add('has-file'); hint.textContent = f.name; }
+    });
+    zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+    zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+    zone.addEventListener('drop', e => {
+      e.preventDefault();
+      zone.classList.remove('drag-over');
+      const f = e.dataTransfer.files[0];
+      if (f && f.type === 'application/pdf') {
+        const dt = new DataTransfer();
+        dt.items.add(f);
+        fileInput.files = dt.files;
+        zone.classList.add('has-file');
+        hint.textContent = f.name;
+      }
+    });
+
+    // --- Tag (multi-city) input ---
+    const tagField = document.getElementById('tagField');
+    const cityInput = document.getElementById('cityInput');
+    const cities = [];
+
+    function renderTags() {
+      // Remove existing chips (keep the input)
+      tagField.querySelectorAll('.chip').forEach(c => c.remove());
+      cities.forEach((city, i) => {
+        const chip = document.createElement('span');
+        chip.className = 'chip';
+        chip.innerHTML = city + '<button type="button" class="chip-remove" aria-label="Remove ' + city + '">×</button>';
+        chip.querySelector('.chip-remove').addEventListener('click', () => {
+          cities.splice(i, 1);
+          renderTags();
+        });
+        tagField.insertBefore(chip, cityInput);
+      });
+    }
+
+    cityInput.addEventListener('keydown', e => {
+      if ((e.key === 'Enter' || e.key === ',') && cityInput.value.trim()) {
+        e.preventDefault();
+        const val = cityInput.value.trim().replace(/,$/, '');
+        if (val && !cities.includes(val)) cities.push(val);
+        cityInput.value = '';
+        renderTags();
+      } else if (e.key === 'Backspace' && !cityInput.value && cities.length) {
+        cities.pop();
+        renderTags();
+      }
+    });
+    cityInput.addEventListener('blur', () => {
+      if (cityInput.value.trim()) {
+        const val = cityInput.value.trim();
+        if (!cities.includes(val)) cities.push(val);
+        cityInput.value = '';
+        renderTags();
+      }
+      tagField.classList.remove('focused');
+    });
+    cityInput.addEventListener('focus', () => tagField.classList.add('focused'));
+    tagField.addEventListener('click', () => cityInput.focus());
+
+    // --- Remote toggle ---
+    const remoteCheck = document.getElementById('remote');
+    const toggleWrap = document.getElementById('toggleWrap');
+    remoteCheck.addEventListener('change', function () {
+      toggleWrap.classList.toggle('on', this.checked);
+      document.getElementById('searchError').classList.remove('visible');
+    });
+
+    // --- Country change ---
+    document.getElementById('country').addEventListener('change', () => {
+      document.getElementById('searchError').classList.remove('visible');
+    });
+
+    // --- Stage animation ---
+    let stageTimer = null;
+    function animateStages() {
+      for (let i = 0; i < 5; i++) {
+        document.getElementById('s' + i).className = 'stage';
+        if (i < 4) document.getElementById('seg' + i).className = 'seg';
+      }
+      let i = 0;
+      function tick() {
+        if (i > 0) {
+          document.getElementById('s' + (i - 1)).className = 'stage done';
+          if (i - 1 < 4) document.getElementById('seg' + (i - 1)).className = 'seg done';
+        }
+        if (i < 5) {
+          document.getElementById('s' + i).className = 'stage active';
+          if (i < 4) document.getElementById('seg' + i).className = 'seg active';
+          i++;
+          stageTimer = setTimeout(tick, 2400);
+        }
+      }
+      tick();
+    }
+
+    // --- Submit ---
+    document.getElementById('form').addEventListener('submit', async e => {
+      e.preventDefault();
+
+      const country = document.getElementById('country').value;
+      const isRemote = remoteCheck.checked;
+
+      if (!country && !isRemote) {
+        document.getElementById('searchError').classList.add('visible');
+        return;
+      }
+
+      if (!fileInput.files[0]) return;
+
+      const btn = document.getElementById('btn');
+      const result = document.getElementById('result');
+      const rlabel = document.getElementById('rlabel');
+      const jobid = document.getElementById('jobid');
+      const rnote = document.getElementById('rnote');
+
+      btn.disabled = true;
+      btn.textContent = 'Submitting…';
+      result.className = 'result';
+
+      const fd = new FormData();
+      fd.append('resume', fileInput.files[0]);
+      fd.append('locations', cities.join(','));
+      fd.append('country_code', country);
+      fd.append('remote', isRemote ? 'true' : 'false');
+      const yoe = document.getElementById('yoe').value;
+      if (yoe) fd.append('years_of_experience', yoe);
+
+      try {
+        const resp = await fetch('/start', { method: 'POST', body: fd });
+        const data = await resp.json();
+        if (resp.ok) {
+          result.className = 'result success visible';
+          rlabel.textContent = 'Pipeline queued';
+          jobid.innerHTML = 'job_id  <span>' + data.job_id + '</span>';
+          rnote.textContent = 'Check your inbox — the XLSX report arrives when the pipeline completes.';
+          if (stageTimer) clearTimeout(stageTimer);
+          animateStages();
+        } else {
+          result.className = 'result error visible';
+          rlabel.textContent = 'Error';
+          jobid.textContent = data.detail || 'Something went wrong.';
+          rnote.textContent = '';
+        }
+      } catch {
+        result.className = 'result error visible';
+        rlabel.textContent = 'Could not connect';
+        jobid.textContent = 'Make sure the backend is running on :8000';
+        rnote.textContent = '';
+      }
+
+      btn.disabled = false;
+      btn.textContent = 'Run Pipeline';
+    });
+  </script>
+</body>
+</html>
